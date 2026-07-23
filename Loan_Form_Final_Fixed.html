@@ -828,10 +828,19 @@
                         <p>Submitting...</p>
                     </div>
 
-                    <div class="step-footer">
+                    <div class="step-footer" id="step7Footer">
                         <button type="button" class="btn btn-secondary" onclick="goToStep(6)">← Back</button>
                         <button class="btn btn-primary" id="submitBtn" onclick="submitForm()">✓ Submit Application</button>
                         <button class="btn btn-secondary" onclick="resetForm()" id="resetBtn">↻ Reset</button>
+                    </div>
+
+                    <div id="postSubmitPanel" style="display: none;">
+                        <p style="color: #1F9D55; font-weight: 600; margin-top: 20px;">✓ Submitted! Copy the summary below and send it as a backup email.</p>
+                        <textarea id="summaryText" readonly style="width: 100%; height: 280px; font-family: 'Courier New', monospace; font-size: 12px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-top: 10px;"></textarea>
+                        <div class="step-footer">
+                            <button type="button" class="btn btn-primary" onclick="copySummaryText()">📋 Copy to Clipboard</button>
+                            <button type="button" class="btn btn-secondary" onclick="startNewApplication()">↻ Start New Application</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1591,15 +1600,15 @@
             document.getElementById('submitBtn').style.display = 'none';
 
             fetch(config.scriptUrl, { method: 'POST', body: formData })
-                .then(response => response.text())
-                .then(text => {
+                .then(response => response.json())
+                .then(data => {
                     document.getElementById('loadingDiv').style.display = 'none';
-                    document.getElementById('submitBtn').style.display = 'block';
-                    if (text.indexOf('Success') === 0) {
+                    if (data.status === 'Success') {
                         showAlert('✓ Application submitted successfully!', 'success');
-                        resetForm();
+                        showPostSubmitPreview(data.applicationId, data.submittedAt, data.folderUrl, data.documents);
                     } else {
-                        showAlert('❌ Submission failed: ' + text, 'error');
+                        document.getElementById('submitBtn').style.display = 'block';
+                        showAlert('❌ Submission failed: ' + (data.message || 'Unknown error'), 'error');
                     }
                 })
                 .catch(() => {
@@ -1607,6 +1616,80 @@
                     document.getElementById('submitBtn').style.display = 'block';
                     showAlert('❌ Submission failed - network/connection error', 'error');
                 });
+        }
+
+        // ============================================================
+        // POST-SUBMIT PLAIN-TEXT PREVIEW (backup copy-paste flow, in
+        // addition to the internal Gmail draft the backend also creates)
+        // ============================================================
+        function buildPlainTextSummary(applicationId, submittedAt, folderUrl, docs) {
+            const product = document.querySelector('input[name="product"]:checked');
+            const gender = document.querySelector('input[name="gender"]:checked');
+            const lines = [];
+
+            lines.push('New Loan Application');
+            lines.push('');
+            lines.push('Application ID: ' + applicationId);
+            lines.push('Date/Time: ' + submittedAt);
+            lines.push('Agent ID: ' + (config.agentId || ''));
+            lines.push('Product: ' + (product ? (PRODUCT_NAMES[product.value] || product.value) : ''));
+            lines.push('');
+
+            [2, 3, 4, 5].forEach(step => {
+                STEP_FIELDS[step].forEach(fieldId => {
+                    const el = document.getElementById(fieldId);
+                    lines.push(fieldLabel(fieldId) + ': ' + (el ? el.value.trim() : ''));
+                });
+                if (step === 2) lines.push('Gender: ' + (gender ? gender.value : ''));
+                lines.push('');
+            });
+
+            lines.push('Documents:');
+            (docs || []).forEach(d => {
+                if (d.uploaded) {
+                    const pwd = d.password ? ' (Password: ' + d.password + ')' : '';
+                    lines.push(d.name + ': Yes - ' + d.url + pwd);
+                } else {
+                    lines.push(d.name + ': No');
+                }
+            });
+            lines.push('');
+            lines.push('Full application folder: ' + (folderUrl || ''));
+
+            return lines.join('\n');
+        }
+
+        function showPostSubmitPreview(applicationId, submittedAt, folderUrl, docs) {
+            const text = buildPlainTextSummary(applicationId, submittedAt, folderUrl, docs);
+            document.getElementById('summaryText').value = text;
+            document.getElementById('reviewContent').style.display = 'none';
+            document.getElementById('step7Footer').style.display = 'none';
+            document.getElementById('postSubmitPanel').style.display = 'block';
+        }
+
+        function copySummaryText() {
+            const textarea = document.getElementById('summaryText');
+            textarea.focus();
+            textarea.select();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textarea.value)
+                    .then(() => showAlert('✓ Copied to clipboard!', 'success'))
+                    .catch(() => showAlert('Text is selected - use your device\'s copy action', 'error'));
+            } else {
+                try {
+                    document.execCommand('copy');
+                    showAlert('✓ Copied to clipboard!', 'success');
+                } catch (e) {
+                    showAlert('Text is selected - use your device\'s copy action', 'error');
+                }
+            }
+        }
+
+        function startNewApplication() {
+            document.getElementById('postSubmitPanel').style.display = 'none';
+            document.getElementById('reviewContent').style.display = '';
+            document.getElementById('step7Footer').style.display = '';
+            resetForm();
         }
 
         function resetForm() {
