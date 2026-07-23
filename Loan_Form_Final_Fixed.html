@@ -1629,11 +1629,12 @@
         function copySummaryText() {
             const subject = document.getElementById('summarySubject').textContent;
             const previewEl = document.getElementById('summaryPreview');
+            const htmlForClipboard = '<p><b>Subject:</b> ' + subject + '</p>' + previewEl.innerHTML;
             const plainText = 'Subject: ' + subject + '\n\n' + previewEl.innerText;
 
             if (navigator.clipboard && window.ClipboardItem) {
                 const item = new ClipboardItem({
-                    'text/html': new Blob([previewEl.innerHTML], { type: 'text/html' }),
+                    'text/html': new Blob([htmlForClipboard], { type: 'text/html' }),
                     'text/plain': new Blob([plainText], { type: 'text/plain' })
                 });
                 navigator.clipboard.write([item])
