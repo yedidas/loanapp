@@ -835,8 +835,9 @@
                     </div>
 
                     <div id="postSubmitPanel" style="display: none;">
-                        <p style="color: #1F9D55; font-weight: 600; margin-top: 20px;">✓ Submitted! Copy the summary below and send it as a backup email.</p>
-                        <textarea id="summaryText" readonly style="width: 100%; height: 280px; font-family: 'Courier New', monospace; font-size: 12px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-top: 10px;"></textarea>
+                        <p style="color: #1F9D55; font-weight: 600; margin-top: 20px;">✓ Submitted! Copy this below and send it as a backup email.</p>
+                        <p style="font-size: 13px; color: #667eea; font-weight: 600; margin-top: 12px;">Subject: <span id="summarySubject"></span></p>
+                        <div id="summaryPreview" style="border: 1px solid #ddd; border-radius: 6px; padding: 15px; max-height: 420px; overflow-y: auto; background: #fafafa; margin-top: 8px;"></div>
                         <div class="step-footer">
                             <button type="button" class="btn btn-primary" onclick="copySummaryText()">📋 Copy to Clipboard</button>
                             <button type="button" class="btn btn-secondary" onclick="startNewApplication()">↻ Start New Application</button>
@@ -1605,7 +1606,7 @@
                     document.getElementById('loadingDiv').style.display = 'none';
                     if (data.status === 'Success') {
                         showAlert('✓ Application submitted successfully!', 'success');
-                        showPostSubmitPreview(data.applicationId, data.submittedAt, data.folderUrl, data.documents);
+                        showPostSubmitPreview(data);
                     } else {
                         document.getElementById('submitBtn').style.display = 'block';
                         showAlert('❌ Submission failed: ' + (data.message || 'Unknown error'), 'error');
@@ -1619,69 +1620,44 @@
         }
 
         // ============================================================
-        // POST-SUBMIT PLAIN-TEXT PREVIEW (backup copy-paste flow, in
-        // addition to the internal Gmail draft the backend also creates)
+        // POST-SUBMIT PREVIEW - renders the exact same HTML as the
+        // internal Gmail draft (returned by the backend), so the two
+        // always look identical. Backup copy-paste flow, in addition
+        // to the internal Gmail draft the backend also creates.
         // ============================================================
-        function buildPlainTextSummary(applicationId, submittedAt, folderUrl, docs) {
-            const product = document.querySelector('input[name="product"]:checked');
-            const gender = document.querySelector('input[name="gender"]:checked');
-            const lines = [];
-
-            lines.push('New Loan Application');
-            lines.push('');
-            lines.push('Application ID: ' + applicationId);
-            lines.push('Date/Time: ' + submittedAt);
-            lines.push('Agent ID: ' + (config.agentId || ''));
-            lines.push('Product: ' + (product ? (PRODUCT_NAMES[product.value] || product.value) : ''));
-            lines.push('');
-
-            [2, 3, 4, 5].forEach(step => {
-                STEP_FIELDS[step].forEach(fieldId => {
-                    const el = document.getElementById(fieldId);
-                    lines.push(fieldLabel(fieldId) + ': ' + (el ? el.value.trim() : ''));
-                });
-                if (step === 2) lines.push('Gender: ' + (gender ? gender.value : ''));
-                lines.push('');
-            });
-
-            lines.push('Documents:');
-            (docs || []).forEach(d => {
-                if (d.uploaded) {
-                    const pwd = d.password ? ' (Password: ' + d.password + ')' : '';
-                    lines.push(d.name + ': Yes - ' + d.url + pwd);
-                } else {
-                    lines.push(d.name + ': No');
-                }
-            });
-            lines.push('');
-            lines.push('Full application folder: ' + (folderUrl || ''));
-
-            return lines.join('\n');
-        }
-
-        function showPostSubmitPreview(applicationId, submittedAt, folderUrl, docs) {
-            const text = buildPlainTextSummary(applicationId, submittedAt, folderUrl, docs);
-            document.getElementById('summaryText').value = text;
+        function showPostSubmitPreview(data) {
+            document.getElementById('summarySubject').textContent = data.subject || '';
+            document.getElementById('summaryPreview').innerHTML = data.emailBodyHtml || '';
             document.getElementById('reviewContent').style.display = 'none';
             document.getElementById('step7Footer').style.display = 'none';
             document.getElementById('postSubmitPanel').style.display = 'block';
         }
 
         function copySummaryText() {
-            const textarea = document.getElementById('summaryText');
-            textarea.focus();
-            textarea.select();
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(textarea.value)
-                    .then(() => showAlert('✓ Copied to clipboard!', 'success'))
-                    .catch(() => showAlert('Text is selected - use your device\'s copy action', 'error'));
+            const subject = document.getElementById('summarySubject').textContent;
+            const previewEl = document.getElementById('summaryPreview');
+            const plainText = 'Subject: ' + subject + '\n\n' + previewEl.innerText;
+
+            if (navigator.clipboard && window.ClipboardItem) {
+                const item = new ClipboardItem({
+                    'text/html': new Blob([previewEl.innerHTML], { type: 'text/html' }),
+                    'text/plain': new Blob([plainText], { type: 'text/plain' })
+                });
+                navigator.clipboard.write([item])
+                    .then(() => showAlert('✓ Copied! Paste into your email (formatting included)', 'success'))
+                    .catch(() => copyPlainTextFallback(plainText));
             } else {
-                try {
-                    document.execCommand('copy');
-                    showAlert('✓ Copied to clipboard!', 'success');
-                } catch (e) {
-                    showAlert('Text is selected - use your device\'s copy action', 'error');
-                }
+                copyPlainTextFallback(plainText);
+            }
+        }
+
+        function copyPlainTextFallback(plainText) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(plainText)
+                    .then(() => showAlert('✓ Copied (plain text)', 'success'))
+                    .catch(() => showAlert('Could not auto-copy - please select the text above and copy manually', 'error'));
+            } else {
+                showAlert('Could not auto-copy - please select the text above and copy manually', 'error');
             }
         }
 
