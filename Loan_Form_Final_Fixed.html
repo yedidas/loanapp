@@ -820,7 +820,8 @@
 
                     <div class="loading" id="loadingDiv">
                         <div class="spinner"></div>
-                        <p>Submitting...</p>
+                        <p>Submitting application and documents...</p>
+                        <p style="font-size: 12px; color: #999; margin-top: 8px;">This can take up to a minute with larger files. Please don't close or refresh this page.</p>
                     </div>
 
                     <div class="step-footer" id="step7Footer">
@@ -968,6 +969,14 @@
 
         let config = {};
         const fileUploads = {};
+        let submissionInProgress = false;
+
+        window.addEventListener('beforeunload', function(e) {
+            if (submissionInProgress) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
 
         window.addEventListener('DOMContentLoaded', function() {
             if (localStorage.getItem('loanFormUnlocked') === 'true') {
@@ -1592,10 +1601,12 @@
 
             document.getElementById('loadingDiv').style.display = 'block';
             document.getElementById('submitBtn').style.display = 'none';
+            submissionInProgress = true;
 
             fetch(config.scriptUrl, { method: 'POST', body: formData })
                 .then(response => response.json())
                 .then(data => {
+                    submissionInProgress = false;
                     document.getElementById('loadingDiv').style.display = 'none';
                     if (data.status === 'Success') {
                         showAlert('✓ Application submitted successfully!', 'success');
@@ -1606,6 +1617,7 @@
                     }
                 })
                 .catch(() => {
+                    submissionInProgress = false;
                     document.getElementById('loadingDiv').style.display = 'none';
                     document.getElementById('submitBtn').style.display = 'block';
                     showAlert('❌ Submission failed - network/connection error', 'error');
